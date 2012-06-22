@@ -5,15 +5,16 @@ $LOAD_PATH.unshift *Dir["#{File.dirname(__FILE__)}/../vendor/**/lib"]
 require "json"
 
 unless ARGV[0]
-  puts "Usage: ./script/deliver_payload [service-name]"
+  puts "Usage: ./script/deliver_payload [service-name] [event]"
   exit 1
 end
 
-payload_file = File.new("docs/github_payload")
+payload_file = File.new(ARGV[1] || "docs/github_payload")
 hash = eval(payload_file.read)
 
+event = hash["event"] || "push"
 data_json = JSON.generate(hash["data"])
 payload_json = JSON.generate(hash["payload"])
 
 File.open( "docs/payload_data", 'w' ) { |f| f.write( "data=#{data_json}&payload=#{payload_json}" ) }
-exec "curl --data-binary @docs/payload_data http://localhost:8080/#{ARGV[0]}/push"
+exec "curl --data-binary @docs/payload_data http://localhost:8080/#{ARGV[0]}/#{event}"
