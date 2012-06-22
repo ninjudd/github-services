@@ -8,9 +8,12 @@ class Service::GithubIssues < Service
 
   self.title = 'Github:issues'
 
+  def repo_url
+    @repo_url ||= payload['repository']['url']
+  end
+
   def url
     @url ||= begin
-      repo_url  = payload['repository']['url']
       issue_num = payload['issue']['number']
       token     = data['access_token']
       "#{repo_url}/issues/#{issue_num}?access_token=#{token}"
@@ -52,7 +55,8 @@ class Service::GithubIssues < Service
 
   def comment_milestone
     if prefix = data['milestone_prefix']
-      comment.body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first).last
+      title = comment.body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first).last
+      milestone_number(title)
     end
   end
 
@@ -94,6 +98,21 @@ class Service::GithubIssues < Service
     return if attrs.empty?
 
     response = http_method(:patch, url, attrs.to_json)
+    JSON.parse(response.body)
+  end
+
+  def milestone_number(title)
+    return unless title
+
+    [:open, :closed].each do |state|
+      get_json("#{repo_url}/milestones?state=#{state}").each do |milestone|
+        return milestone['number'] if milestone['title'] == title
+      end
+    end
+  end
+
+  def get_json(url)
+    response = http_get(url)
     JSON.parse(response.body)
   end
 end
