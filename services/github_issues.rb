@@ -1,7 +1,8 @@
 class Service::GithubIssues < Service
   string :access_token, :label_prefix, :milestone_prefix, :assignee_prefix,
          :update_labels_when_opened, :update_labels_when_closed,
-         :update_labels_when_reopened, :update_labels_when_commented
+         :update_labels_when_reopened, :update_labels_when_commented,
+         :comment_substitutions
 
   TOKEN_REGEX = /\"[^\"]+\"|[-\d\w]+/
   USER_REGEX  = /[-\d\w]+/
@@ -28,10 +29,22 @@ class Service::GithubIssues < Service
 
   def comment_labels
     if prefix = data['label_prefix']
-      body = scrub_prefixes(comment.body, ['milestone_prefix', 'assignee_prefix'])
+      body = scrub_prefixes(comment_body, ['milestone_prefix', 'assignee_prefix'])
       body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first)
     else
       []
+    end
+  end
+
+  def comment_body
+    @body ||= begin
+      body = comment.body
+      if subs = JSON.parse(data['comment_substitutions']) rescue nil
+        subs.each do |string, replacement|
+          body = body.gsub(string, replacement)
+        end
+      end
+      body
     end
   end
 
@@ -44,14 +57,14 @@ class Service::GithubIssues < Service
 
   def comment_milestone
     if prefix = data['milestone_prefix']
-      title = comment.body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first).last
+      title = comment_body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first).last
       milestone_number(title)
     end
   end
 
   def comment_assignee
     if prefix = data['assignee_prefix']
-      comment.body.scan(/#{prefix}@(#{USER_REGEX})/).map(&:first).last
+      comment_body.scan(/#{prefix}@(#{USER_REGEX})/).map(&:first).last
     end
   end
 
