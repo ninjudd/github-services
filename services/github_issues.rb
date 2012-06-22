@@ -8,21 +8,10 @@ class Service::GithubIssues < Service
 
   self.title = 'Github:issues'
 
-  def repo_url
-    @repo_url ||= payload['repository']['url']
-  end
-
-  def url
-    @url ||= begin
-      issue_num = payload['issue']['number']
-      token     = data['access_token']
-      "#{repo_url}/issues/#{issue_num}?access_token=#{token}"
-    end
-  end
-
   def receive_issue_comment
     update_labels!(action_labels(:commented) + comment_labels)
-    update_issue!(:milestone => comment_milestone, :assignee => comment_assignee)
+    update_issue!(:milestone => comment_milestone)
+    update_issue!(:assignee  => comment_assignee)
   end
 
   def receive_issues
@@ -61,7 +50,7 @@ class Service::GithubIssues < Service
   end
 
   def comment_assignee
-    if prefix = data['assign_prefix']
+    if prefix = data['assignee_prefix']
       comment.body.scan(/#{prefix}@(#{USER_REGEX})/).map(&:first).last
     end
   end
@@ -97,7 +86,7 @@ class Service::GithubIssues < Service
     attrs = attrs.delete_if {|k,v| v.nil?}
     return if attrs.empty?
 
-    response = http_method(:patch, url, attrs.to_json)
+    response = http_method(:patch, issue_url, attrs.to_json)
     JSON.parse(response.body)
   end
 
@@ -105,14 +94,34 @@ class Service::GithubIssues < Service
     return unless title
 
     [:open, :closed].each do |state|
-      get_json("#{repo_url}/milestones?state=#{state}").each do |milestone|
+      get_json(milestones_url(state)).each do |milestone|
         return milestone['number'] if milestone['title'] == title
       end
     end
+    nil
   end
 
   def get_json(url)
     response = http_get(url)
     JSON.parse(response.body)
+  end
+
+  def token
+    @token ||= data['access_token']
+  end
+
+  def repo_url
+    @repo_url ||= payload['repository']['url']
+  end
+
+  def issue_url
+    @issue_url ||= begin
+      issue_num = payload['issue']['number']
+      "#{repo_url}/issues/#{issue_num}?access_token=#{token}"
+    end
+  end
+
+  def milestones_url(state)
+    "#{repo_url}/milestones?state=#{state}&access_token=#{token}"
   end
 end
