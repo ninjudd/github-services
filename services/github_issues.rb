@@ -39,10 +39,10 @@ class Service::GithubIssues < Service
   def comment_body
     @body ||= begin
       body = comment.body
-      if subs = JSON.parse(data['comment_substitutions']) rescue nil
-        subs.each do |string, replacement|
-          body = body.gsub(string, replacement)
-        end
+      subs = data['comment_substitutions']
+      subs = (JSON.parse(subs) rescue {}) if subs.kind_of?(String)
+      subs.each do |string, replacement|
+        body = body.gsub(string, replacement)
       end
       body
     end
