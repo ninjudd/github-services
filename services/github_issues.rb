@@ -1,12 +1,10 @@
 class Service::GithubIssues < Service
-  UPDATE_LABELS = [:closed, :reopened, :opened, :commented].map do |action|
-    "update_labels_when_#{action}".to_sym
-  end
+  string :access_token, :label_prefix, :milestone_prefix, :assignee_prefix,
+         :update_labels_when_opened, :update_labels_when_closed,
+         :update_labels_when_reopened, :update_labels_when_commented
 
-  string :access_token, :comment_label_prefix, *UPDATE_LABELS
-  white_list :comment_label_prefix, *UPDATE_LABELS
-
-  LABEL_REGEX = /\"[^\"]+\"|[-\w]+/
+  TOKEN_REGEX = /\"[^\"]+\"|[-\d\w]+/
+  USER_REGEX  = /[-\d\w]+/
 
   self.title = 'Github:issues'
 
@@ -21,6 +19,7 @@ class Service::GithubIssues < Service
 
   def receive_issue_comment
     update_labels!(action_labels(:commented) + comment_labels)
+    update_issue!(:milestone => comment_milestone, :assignee => comment_assignee)
   end
 
   def receive_issues
@@ -36,10 +35,30 @@ class Service::GithubIssues < Service
   end
 
   def comment_labels
-    if prefix = data['comment_label_prefix']
-      comment.body.scan(/#{prefix}(#{LABEL_REGEX})/).map(&:first)
+    if prefix = data['label_prefix']
+      body = scrub_prefixes(comment.body, ['milestone_prefix', 'assignee_prefix'])
+      body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first)
     else
       []
+    end
+  end
+
+  def scrub_prefixes(body, prefixes)
+    prefixes.each do |prefix|
+      body = body.gsub(data[prefix], '') if data[prefix]
+    end
+    body
+  end
+
+  def comment_milestone
+    if prefix = data['milestone_prefix']
+      comment.body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first).last
+    end
+  end
+
+  def comment_assignee
+    if prefix = data['assign_prefix']
+      comment.body.scan(/#{prefix}@(#{USER_REGEX})/).map(&:first).last
     end
   end
 
@@ -63,10 +82,18 @@ class Service::GithubIssues < Service
   end
 
   def set_labels!(labels)
-    response = http_method(:patch, url, {:labels => labels}.to_json)
+    body = update_issue!(:labels => labels)
 
-    if errors = response.body['errors'] and missing = errors['value']
-      set_labels!(labels - missing)
+    if missing = (body['errors'] || []).detect {|e| e['code'] == 'missing'}
+      set_labels!(labels - missing['value'])
     end
+  end
+
+  def update_issue!(attrs)
+    attrs = attrs.delete_if {|k,v| v.nil?}
+    return if attrs.empty?
+
+    response = http_method(:patch, url, attrs.to_json)
+    JSON.parse(response.body)
   end
 end
