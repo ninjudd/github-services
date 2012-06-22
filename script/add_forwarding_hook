@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+$LOAD_PATH.unshift *Dir["#{File.dirname(__FILE__)}/../vendor/**/lib"]
+
+# Adds a Web service hook with the provided data encoded in a param. Can be used for testing your
+# service with the live site by forwarding specific events to your test server.
+
+require 'json'
+require 'uri'
+
+def prompt(string)
+  $stdout.write(string)
+  $stdout.flush
+  $stdin.readline.chomp
+end
+
+unless ARGV.size == 4
+  puts "Usage: ./script/forwarding_url [repo] [events] [service-url] [json_data]"
+  exit 1
+end
+repo, events, service_url, data = ARGV
+data   = JSON.generate(JSON.parse(data))
+events = events.scan(/\w+/)
+
+puts "\nYou want to forward #{events.inspect} events on #{repo} to #{service_url} with this data:"
+puts
+puts data
+puts
+token = prompt("Provide your access_token to proceed: ")
+
+events.each do |event|
+  url  = "#{service_url}/#{event}?data=#{URI::encode(data)}"
+  opts = {:name => "web", :config => {:url => url}, :events => [event]}
+  cmd  = "curl https://api.github.com/repos/#{repo}/hooks?access_token=#{token} -d '#{opts.to_json}'"
+
+  puts cmd
+  system cmd
+end
+
