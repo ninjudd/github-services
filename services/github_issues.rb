@@ -1,6 +1,10 @@
 class Service::GithubIssues < Service
-  string :access_token, :update_labels_on_close, :comment_label_prefix
-  white_list :update_labels_on_close, :comment_label_prefix
+  UPDATE_LABELS = [:closed, :reopened, :opened, :commented].map do |action|
+    "update_labels_when_#{action}".to_sym
+  end
+
+  string :access_token, :comment_label_prefix, *UPDATE_LABELS
+  white_list :comment_label_prefix, *UPDATE_LABELS
 
   LABEL_REGEX = /\"[^\"]+\"|[-\w]+/
 
@@ -16,16 +20,26 @@ class Service::GithubIssues < Service
   end
 
   def receive_issue_comment
-    if prefix = data['comment_label_prefix']
-      labels = comment.body.scan(/#{prefix}(#{LABEL_REGEX})/).map(&:first)
-      update_labels!(labels)
-    end
+    update_labels!(action_labels(:commented) + comment_labels)
   end
 
   def receive_issues
-    if payload['action'] = 'closed'
-      labels = data['update_labels_on_close'].split(/,\s*/)
-      update_labels!(labels)
+    update_labels!(action_labels)
+  end
+
+  def action_labels(action = payload['action'])
+    if update_labels = data["update_labels_when_#{action}"]
+      update_labels.split(/,\s*/)
+    else
+      []
+    end
+  end
+
+  def comment_labels
+    if prefix = data['comment_label_prefix']
+      comment.body.scan(/#{prefix}(#{LABEL_REGEX})/).map(&:first)
+    else
+      []
     end
   end
 
