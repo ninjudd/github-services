@@ -57,8 +57,16 @@ class Service::GithubIssues < Service
       end
 
       if old_labels != new_labels
-        http_method(:patch, url, {:labels => new_labels}.to_json)
+        set_labels!(new_labels)
       end
+    end
+  end
+
+  def set_labels!(labels)
+    response = http_method(:patch, url, {:labels => labels}.to_json)
+
+    if errors = response.body['errors'] and missing = errors['value']
+      set_labels!(labels - missing)
     end
   end
 end
