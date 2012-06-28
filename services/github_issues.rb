@@ -2,7 +2,7 @@ class Service::GithubIssues < Service
   string :access_token, :label_prefix, :milestone_prefix, :assignee_prefix,
          :update_labels_when_opened, :update_labels_when_closed,
          :update_labels_when_reopened, :update_labels_when_commented,
-         :comment_substitutions
+         :removal_prefix, :comment_substitutions
 
   TOKEN_REGEX = /\"[^\"]+\"|[-\d\w]+/
   USER_REGEX  = /[-\d\w]+/
@@ -73,8 +73,10 @@ class Service::GithubIssues < Service
       old_labels = issue.labels.map {|l| l['name']}.to_set
       new_labels = old_labels.dup
 
+      removal_prefix = data['removal_prefix']
+
       labels.each do |label|
-        if label.start_with?('-')
+        if removal_prefix and label.start_with?(removal_prefix)
           new_labels.delete(label[1..-1])
         else
           new_labels << label
