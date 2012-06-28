@@ -43,7 +43,7 @@ class Service::GithubIssues < Service
       subs = (JSON.parse(subs) rescue {}) if subs.kind_of?(String)
       subs.each do |string, replacement|
         body = body.gsub(string, replacement)
-      end
+      end if subs
       body
     end
   end
@@ -76,8 +76,8 @@ class Service::GithubIssues < Service
       removal_prefix = data['removal_prefix']
 
       labels.each do |label|
-        if removal_prefix and label.start_with?(removal_prefix)
-          new_labels.delete(label[1..-1])
+        if removal_prefix and label =~ /#{removal_prefix}(#{TOKEN_REGEX})/
+          new_labels.delete($1)
         else
           new_labels << label
         end
