@@ -2,7 +2,7 @@ class Service::GithubIssues < Service
   string :access_token, :label_prefix, :milestone_prefix, :assignee_prefix,
          :update_labels_when_opened, :update_labels_when_closed,
          :update_labels_when_reopened, :update_labels_when_commented,
-         :removal_prefix, :comment_substitutions
+         :removal_prefix, :substitutions
 
   TOKEN_REGEX = /\"[^\"]+\"|[-\d\w]+/
   USER_REGEX  = /[-\d\w]+/
@@ -39,7 +39,7 @@ class Service::GithubIssues < Service
   def comment_body
     @body ||= begin
       body = comment.body
-      subs = data['comment_substitutions']
+      subs = data['substitutions']
       subs = (JSON.parse(subs) rescue {}) if subs.kind_of?(String)
       subs.each do |string, replacement|
         body = body.gsub(string, replacement)
