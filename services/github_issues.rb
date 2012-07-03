@@ -9,7 +9,14 @@ class Service::GithubIssues < Service
 
   self.title = 'Github:issues'
 
-  def receive_issue_comment
+  def receive_issue_comment    
+    if issue.closed_at == issue.updated_at
+      # Avoid race condition when "Close & comment" is clicked by waiting and
+      # then reloading the issue labels.
+      sleep 5
+      reload_issue_labels
+    end
+
     update_labels!(action_labels(:commented) + comment_labels)
     update_issue!(:milestone => comment_milestone)
     update_issue!(:assignee  => comment_assignee)
@@ -68,9 +75,17 @@ class Service::GithubIssues < Service
     end
   end
 
+  def issue_labels
+    @issue_labels ||= issue.labels.map {|l| l['name']}.to_set
+  end
+
+  def reload_issue_labels
+    @issue_labels = get_json(issue_url).map {|l| l['name']}.to_set
+  end
+
   def update_labels!(labels)
     if labels.any?
-      old_labels = issue.labels.map {|l| l['name']}.to_set
+      old_labels = issue_labels
       new_labels = old_labels.dup
 
       removal_prefix = data['removal_prefix']
