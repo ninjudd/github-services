@@ -17,13 +17,21 @@ class Service::GithubIssues < Service
       reload_issue_labels
     end
 
-    update_labels!(action_labels(:commented) + comment_labels)
-    update_issue!(:milestone => comment_milestone)
-    update_issue!(:assignee  => comment_assignee)
+    update_issue!(:milestone => message_milestone(comment_body))
+    update_issue!(:assignee  => message_assignee(comment_body))
+    update_labels!(action_labels(:commented) + message_labels(comment_body))
   end
 
   def receive_issues
-    update_labels!(action_labels)
+    labels = []
+
+    if payload['action'] == 'opened'
+      update_issue!(:milestone => message_milestone(issue_body))
+      update_issue!(:assignee  => message_assignee(issue_body))
+      labels = message_labels(issue_body)
+    end
+
+    update_labels!(action_labels + labels)
   end
 
   def action_labels(action = payload['action'])
@@ -34,24 +42,29 @@ class Service::GithubIssues < Service
     end
   end
 
-  def comment_labels
+  def comment_body
+    @body ||= substitute(comment.body)
+  end
+
+  def issue_body
+    @body ||= substitute(issue.body)
+  end
+
+  def substitute(body)
+    subs = data['substitutions']
+    subs = (JSON.parse(subs) rescue {}) if subs.kind_of?(String)
+    subs.each do |string, replacement|
+      body = body.gsub(string, replacement)
+    end if subs
+    body
+  end
+
+  def message_labels(body)
     if prefix = data['label_prefix']
-      body = scrub_prefixes(comment_body, ['milestone_prefix', 'assignee_prefix'])
+      body = scrub_prefixes(body, ['milestone_prefix', 'assignee_prefix'])
       body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first)
     else
       []
-    end
-  end
-
-  def comment_body
-    @body ||= begin
-      body = comment.body
-      subs = data['substitutions']
-      subs = (JSON.parse(subs) rescue {}) if subs.kind_of?(String)
-      subs.each do |string, replacement|
-        body = body.gsub(string, replacement)
-      end if subs
-      body
     end
   end
 
@@ -62,16 +75,16 @@ class Service::GithubIssues < Service
     body
   end
 
-  def comment_milestone
+  def message_milestone(body)
     if prefix = data['milestone_prefix']
-      title = comment_body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first).last
+      title = body.scan(/#{prefix}(#{TOKEN_REGEX})/).map(&:first).last
       milestone_number(title)
     end
   end
 
-  def comment_assignee
+  def message_assignee(body)
     if prefix = data['assignee_prefix']
-      comment_body.scan(/#{prefix}@(#{USER_REGEX})/).map(&:first).last
+      body.scan(/#{prefix}@(#{USER_REGEX})/).map(&:first).last
     end
   end
 
@@ -80,7 +93,7 @@ class Service::GithubIssues < Service
   end
 
   def reload_issue_labels
-    @issue_labels = get_json(issue_url).map {|l| l['name']}.to_set
+    @issue_labels = get_json(issue_url)['labels'].map {|l| l['name']}.to_set
   end
 
   def update_labels!(labels)
